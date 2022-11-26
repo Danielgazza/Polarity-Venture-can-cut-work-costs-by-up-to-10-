@@ -22,4 +22,5 @@ Tools used
 * lean approach 
 
 
+![Influential Departments](https://user-images.githubusercontent.com/103642582/204098308-0bda12ae-6a85-41fd-be98-230c5168cc7f.png)
 
