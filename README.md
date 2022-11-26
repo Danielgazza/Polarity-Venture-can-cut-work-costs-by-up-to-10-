@@ -3,7 +3,7 @@
 ![steve job](https://user-images.githubusercontent.com/103642582/201438994-cfc95560-851c-4e22-a201-bd16eedf991d.jpg)
 
 
-Polarity Venture can cut work costs by up to 20%, through interdepartmental collaborations.
+Polarity Venture can cut work costs by up to 10%, through interdepartmental collaborations.
 
 Consumers were promised a new investment package by the end of April 2021, but they did not receive it until the end of June, which is an additional two months, and even then, consumers experienced errors in processing packages, making it difficult to understand what the packages were and stood for.
 
