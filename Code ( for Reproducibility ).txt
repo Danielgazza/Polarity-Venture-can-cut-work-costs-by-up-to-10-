@@ -1,0 +1,375 @@
+﻿## Load packages
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(igraph)
+
+
+
+
+## Importing data (messages data)
+messages <- readr::read_csv('data/messages.csv', show_col_types = FALSE)
+head(messages)
+
+
+## Importing data (messages data)
+employees <- readr::read_csv('data/employees.csv', show_col_types = FALSE)
+head(employees)
+
+
+
+
+
+
+## We are going to combine the two tables together, so we can get to and fro of each message
+## so we can correctly get the network connectons between employees and departments.
+#
+# In creating a table for departments we will have to connect the messages table with 
+# employees table, because that where we have departments of each employee, so we can 
+# see the connection of employees to departments and departments.
+#
+# Extract the departments of employees who initiated communications by mapping sender 
+# from messages to id in employees table, since sender means the employee sending out or 
+# making a communication.
+sender<- messages%>%
+  rename(id=sender)%>% # To enable joining using id
+  select(id,timestamp,message_length)%>%
+  inner_join(employees,messages, by="id") %>% # Mapping messages to employees to get departments of employees who sent messages
+rename(sender=id,timestamp_sen=timestamp,department_sen=department,message_length_sen=message_length,location_sen=location,age_sen=age) # Rename id in our sender table back to sender, since we will joining with receivers
+
+
+
+
+# Extract the departments of employees whom communications were made to by mapping
+# receiver from messages to id in employees table, 
+# since receiver means the employee whom communications were made to.
+receiver<-messages%>%
+  rename(id=receiver)%>% # To enable joining using id
+  select(id,timestamp,message_length)%>%
+  inner_join(employees,messages, by="id")%>% # Mapping messages to employees to get departments of employees whom messages were made to
+  rename(receiver=id,timestamp_rec=timestamp,department_rec=department,message_length_rec=message_length,location_rec=location,age_rec=age) # Rename id in our receiver table back to receiver, since we will joining with sender
+
+
+
+
+# Combine sender and receiver together to get departments, simply employees who 
+# initiated connections and those that receive, 
+# so we can perform analysis on our departments to derive answers.
+department<-cbind(sender,receiver)%>%
+  select(sender,receiver,timestamp_sen,timestamp_rec,department_sen,department_rec,
+         message_length_sen,message_length_rec,location_sen,location_rec,age_sen,age_rec)%>%
+  subset(select = -c(message_length_rec,timestamp_sen))%>%
+  rename(timestamp=timestamp_rec,message_length=message_length_sen)
+
+
+
+
+# This is to figure out the activeness of each department in respect to how many commuincation have been 
+# made by one department to the other, and the number of communications or connections have been receiver
+# from other department.
+count_of_sender<-department%>%
+  count(department_sen,name = "count", sort = TRUE)%>%
+  mutate(category="sender")%>%
+  rename(department=department_sen)
+
+
+count_of_receiver<-department%>%
+  count(department_rec,name = "count",sort = TRUE)%>%
+  mutate(category="receiver")%>%
+  rename(department=department_rec)
+
+
+# Joining the both result so we can plot it on a stacked bar chart.
+department_count<-rbind(count_of_sender,count_of_receiver)
+
+
+ggplot(department_count,aes(x=reorder(department,-count) ,y=count , fill= category,label =count))+
+  geom_bar(stat = "identity", width =0.8)+
+  labs(title = "Most active and least active departments",
+       subtitle = "Departments and how active they are when it comes to connecting with others",
+       x="Department",
+       y="Numberof Messages(exchanged)")+
+  scale_fill_manual(values = c("#317773","#EEA47FFF"))+
+  geom_text(size =3.5,position = position_stack(vjust = 0.5))
+
+
+
+
+## the number of employees in a department in each country. 
+country.department.count<-employees%>%
+  group_by(department)%>%
+  count(location,name = "count",sort = TRUE)
+
+
+
+
+## merging to our department count table to map departments to countries they are in
+country.department.merged<-tibble(merge(department_count,country.department.count, by="department"))%>%
+  rename(count_dep=count.x,count_loc=count.y)
+
+
+## separating department by countries, to get the activeness of each department of each country
+ggplot(country.department.merged,aes(x=reorder(department,-count_loc) ,y=count_loc , fill= category,label =count_loc))+
+  geom_bar(stat = "identity", width =0.8)+
+  labs(title = "Most active and least active departments by countries",
+       subtitle = "Departments and how active they are when it comes to connecting(communicating) with others in each country",
+       x="Department",
+       y="Number of Messages(exchanged)")+
+  scale_fill_manual(values = c("#FEE715FF","#4831D4"))+
+  geom_text(size =3,position = position_stack(vjust = 0.5))+
+  facet_wrap(~country.department.merged$location)+
+  theme(axis.text.x = element_text(angle = 90))
+
+
+
+
+
+
+# Creating igraph object for network analysis
+con<-data.frame(department$sender,department$receiver)
+net<-graph.data.frame(con,directed = T)
+#label the vertex
+V(net)$label<-V(net)$name
+# add the weight. Degree represents the number of connections to a node
+V(net)$degree<-degree(net)
+
+
+## getting the max degree of net, the most connections
+max.degree<-degree(net)==max(degree(net))
+V(net)$name[max.degree]
+# employee 605 has the most connection
+# Assessing the full details about of employee 605
+tibble(employees%>%
+  filter(id==605))
+
+
+#Histogram to show us the degree of each employees,(their connections with colleagues)
+hist(V(net)$degree,
+     col = "blue",
+     main = "Employees Connection",
+     sub = "Number of connections employees have made",
+     ylab = "Number of Nodes(connections)",
+     xlab = "Degree of Verticles(employees)")
+# we have nodes(employee) that have 0 to 100 connections, From the histogram we can see most employees have 
+# have connections with each other, or are in communications with each other.
+
+
+
+
+# connections 605 has
+# Employee 605 is the only employee with the connection above 400
+net_605<-subgraph.edges(net,E(net)[.inc(V(net)[degree>400])])
+
+
+set.seed(111)
+plot(net_605,
+     vertex.color = "green",
+     vertex.size = 2,
+     edge.arrow.size = 0.1,
+     vertex.label.cex = 0.8,
+     main= "The Connections Employee 605 Has",
+     sub= "Employees 605 has been in communication with")
+
+
+# Showing how frequenlty messages were exchanged/ weight of the relationship
+plot(net_605,
+     vertex.label.color = "black",  
+     vertex.size=1,
+     edge.color = 'orange',
+     edge.width=E(net_605)$degree,
+     edge.arrow.size =0.3,
+     edge.arrow.width=0.3,
+     layout = layout_on_sphere(net_605),
+     main= "Communication network of 605 ",
+     sub= "How frequently messages has been exchanged by 605 to other colleagues, Vice Versa")#on_grid,on_sphere,with_dh,with_kk
+
+
+## Most influential department
+# Create departments network graph
+con1<-data.frame(department$department_sen,department$department_rec)
+network<-graph.data.frame(con1,directed = T)
+#display the vertex
+V(network)
+#label the vertex
+V(network)$label<-V(network)$name
+# add the weight. Degree represents the number of connections to a node
+V(network)$degree<-degree(network)
+
+
+## Differentiating the relationships between departments for easier understanding
+s<-V(network)["Sales"]
+o<-V(network)["Operations"]
+a<-V(network)["Admin"]
+i<-V(network)["IT"]
+m<-V(network)["Marketing"]
+e<-V(network)["Engineering"]
+
+
+# Setting the colors for messages sent by Sales to other departments  
+E(network)[s %--% o]$color<-"red" 
+E(network)[s %--% a]$color<-"lightblue"
+E(network)[s %--% i]$color<-"#E2D1F9"
+E(network)[s %--% m]$color<-"orange"
+E(network)[s %--% e]$color<-"pink" 
+E(network)[s %--% s]$color<-"blue"
+
+
+# Setting the colors for messages sent by Operations to other departments 
+E(network)[o %--% a]$color<-"brown"
+E(network)[o %--% i]$color<-"burlywood" 
+E(network)[o %--% o]$color<-"cyan1"
+E(network)[o %--% m]$color<-"darkgrey" 
+E(network)[o %--% e]$color<-"chartreuse4" 
+E(network)[o %--% s]$color<-"red" 
+
+
+# Setting the colors for messages sent by Admin to other departments 
+E(network)[a %--% a]$color<-"lightsalmon1" 
+E(network)[a %--% o]$color<-"lightgreen"
+E(network)[a %--% i]$color<-"yellow" 
+E(network)[a %--% m]$color<-"lavenderblush4" 
+E(network)[a %--% e]$color<-"lemonchiffon2" 
+
+
+# Setting the colors for messages sent by IT to other departments 
+E(network)[i %--% i]$color<-"ivory1" 
+E(network)[i %--% m]$color<-"maroon" 
+E(network)[i %--% e]$color<-"indianred4"
+
+
+# Setting the colors for messages sent by Marketing to other departments 
+E(network)[m %--% e]$color<-"black"
+E(network)[m %--% a]$color<-"lavenderblush4" 
+
+
+# Setting the colors for messages sent by Engineering to other departments 
+E(network)[e %--% e]$color<-"lightgoldenrod4"
+E(network)[e %--% o]$color<-"chartreuse4" 
+
+
+# Setting the shapes of departments 
+V(network)$shape<-"circle"
+
+
+
+
+
+
+plot(network,
+     vertex.label.color = "black", 
+     vertex.size = eigen_centrality(network)$vector*100,# convert to cm or meter, 
+                                                         #unit of measurement.
+                                                         #to convert to whole numbers 
+                                                         #for visualization.
+     ### This represent the departments more connected by the size of shapes, which 
+     ### is also the strength of relationship. 
+     
+     edge.width=E(network)$degree,
+     #edge.arrow.size = 10,
+     layout = layout_on_grid(network),
+     main= "Influential Departments",
+     sub= "How they are conected to other departments")#on_grid,on_sphere,with_dh,with_kk
+
+
+
+
+###Getting the weight of the weight between departments, 
+### to get the relationship structure of the departments that caused the problem 
+s.o<-length(E(network)[s %--% o])
+s.a<-length(E(network)[s %--% a])
+s.i<-length(E(network)[s %--% i])
+s.m<-length(E(network)[s %--% m])
+s.e<-length(E(network)[s %--% e])
+s.s<-length(E(network)[s %--% s])
+o.a<-length(E(network)[o %--% a])
+o.i<-length(E(network)[o %--% i])
+o.o<-length(E(network)[o %--% o])
+o.m<-length(E(network)[o %--% m])
+o.e<-length(E(network)[o %--% e])
+o.s<-length(E(network)[o %--% s])
+a.a<-length(E(network)[a %--% a])
+a.o<-length(E(network)[a %--% o])
+a.i<-length(E(network)[a %--% i])
+a.m<-length(E(network)[a %--% m])
+a.e<-length(E(network)[a %--% e])
+i.i<-length(E(network)[i %--% i])
+i.m<-length(E(network)[i %--% m])
+i.e<-length(E(network)[i %--% e])
+m.e<-length(E(network)[m %--% e])
+m.a<-length(E(network)[m %--% a])
+e.e<-length(E(network)[e %--% e])
+e.o<-length(E(network)[e %--% o])
+
+
+
+
+## Creating a DataFrame
+r.ship.size <-tibble(Dept= c('s.o','s.a','s.i','s.m','s.e','s.s','o.a','o.i','o.o','o.m','o.e',
+                             'o.s','a.a','a.o','a.i','a.m','a.e','i.i','i.m','i.e','m.e','m.a',
+                             'e.e','e.o'),
+                     r.ship_size= c(s.o,s.a,s.i,s.m,s.e,s.s,o.a,o.i,o.o,o.m,o.e,o.s,a.a,a.o,
+                                    a.i,a.m,a.e,i.i,i.m,i.e,m.e,m.a,e.e,e.o)
+)
+
+
+## Department the problem has been traced to
+dept.delay<-c('o.i','o.s','i.m','s.m','o.m')
+
+
+
+
+ggplot(r.ship.size,aes(x = reorder(Dept,-r.ship_size), y = r.ship_size,
+                       fill=if_else(Dept %in% dept.delay,'Low','High' )))+
+  geom_bar(stat="identity")+
+  labs(title = "Connections between departments",
+       subtitle = "The number of messages exchanged between departments ",
+       x = "Department",
+       y = "Number of messages",
+       fill='lowest connection (in yellow)')+
+  ## add manual color scale
+  scale_fill_manual("legend",         ###### in this call: colour change
+                    values = c("Low" = "#4831D4", "High" = "#CCF381"))+
+  geom_text(aes(label=signif(r.ship_size)),nudge_y = 1,color="#101820FF")+
+  theme_light()
+
+
+
+
+
+
+# Most Infuential Employees
+
+
+
+
+# A data frame housing grouping employees with the same number of connections with others employees 
+degree.net<-data.frame(degree(net))%>%
+  mutate(employee=V(net)$name)%>%
+  rename(degree=degree.net.)%>%#the number relationship each vertex has
+  arrange(desc(degree))%>%
+  mutate(degree=as.integer(degree),employee=as.character(employee))
+
+
+## because of the volumn of the data, the network connections between employees cant be really seen
+## therefore, using the verticies (employees ) that are equal or higher than the mean of degree,
+## and this will give us the employees with the highest connections(most influntial employees)
+Influential_employees<-subset(degree.net,degree>=mean(degree.net$degree))
+nrow(degree.net)
+## Our mean is 11, and we have over 664 employees who have connection more than 11,
+## but for the essence ofvisualization will limit influential employees further to the top 20
+Top.20.Influential_employees<-Influential_employees%>%
+  top_n(20,degree)
+
+
+ggplot(Top.20.Influential_employees,aes(x=reorder(employee,-degree),y=degree))+
+  geom_col(fill="#FEE715FF")+
+  labs(title = "Top 20 Influential Employees",
+       subtitle= "Employees with the most connections ",
+       x="Employees",
+       y="Degree(Number of colleagues in connection with)")+
+  geom_text(aes(label=signif(degree)),nudge_y = 1,color="#101820FF")+
+  theme_classic()
+Reproducibility
