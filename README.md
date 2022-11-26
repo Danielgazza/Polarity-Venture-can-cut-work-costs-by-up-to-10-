@@ -1,4 +1,4 @@
-# Polarity-Venture-can-cut-work-costs-by-up-to-20
+# Polarity-Venture-can-cut-work-costs-by-up-to-10%
 
 ![steve job](https://user-images.githubusercontent.com/103642582/201438994-cfc95560-851c-4e22-a201-bd16eedf991d.jpg)
 
