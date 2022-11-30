@@ -12,9 +12,20 @@ The Analytic term formulated questions to aid in the development of data-driven 
 The goal of this analysis is to develop data-driven steps that HR can use, which leads to the questions, "Identify the most influential departments and employees?" Our most influential departments are also the most active.
 
 
+### Questions
 
-Tools used 
+Questions these project will be trying to answer.
 
+###### *Which departments are the most/least active?
+
+###### *Which employee has the most connections?
+
+###### *Identify the most influential departments and employees?
+
+###### *Using the network analysis, in which departments would you recommend the HR team focus to boost collaboration?
+
+
+### Tools used 
 
 * Network Analysis
 * R programming 
